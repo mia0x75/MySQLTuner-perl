@@ -5806,65 +5806,6 @@ sub mysql_databases {
 
 }
 
-# Recommendations for database columns
-sub mysql_tables {
-    return if ( $opt{dbstat} == 0 );
-
-    subheaderprint "Table Column Metrics";
-    unless ( mysql_version_ge( 5, 5 ) ) {
-        infoprint
-"Skip Database metrics from information schema missing in this version";
-        return;
-    }
-    my @dblist = select_array(
-"SELECT DISTINCT TABLE_SCHEMA FROM information_schema.TABLES WHERE TABLE_SCHEMA NOT IN ( 'mysql', 'performance_schema', 'information_schema', 'sys' );"
-    );
-    foreach (@dblist) {
-        my $dbname = $_;
-        next unless defined $_;
-        infoprint "Database: " . $_ . "";
-        my @dbtable = select_array(
-"SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='$dbname' AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME"
-        );
-        foreach (@dbtable) {
-            my $tbname = $_;
-            infoprint " +-- TABLE: $tbname";
-            my @tbcol = select_array(
-"SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$dbname' AND TABLE_NAME='$tbname'"
-            );
-            foreach (@tbcol) {
-                my $ctype = select_one(
-"SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$dbname' AND TABLE_NAME='$tbname' AND COLUMN_NAME='$_' "
-                );
-                my $isnull = select_one(
-"SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$dbname' AND TABLE_NAME='$tbname' AND COLUMN_NAME='$_' "
-                );
-                infoprint "     +-- Column $tbname.$_:";
-                my $current_type =
-                  uc($ctype) . ( $isnull eq 'NO' ? " NOT NULL" : "" );
-                my $optimal_type = select_str_g( "Optimal_fieldtype",
-                    "SELECT $_ FROM $dbname.$tbname PROCEDURE ANALYSE(100000)"
-                );
-
-                if ( $current_type ne $optimal_type ) {
-                    infoprint "      Current Fieldtype: $current_type";
-                    infoprint "      Optimal Fieldtype: $optimal_type";
-                    badprint
-"Consider changing type for column $_ in table $dbname.$tbname";
-                    push( @generalrec,
-                        "ALTER TABLE $dbname.$tbname MODIFY $_ $optimal_type;"
-                    );
-
-                }
-                else {
-                    goodprint "$dbname.$tbname ($_) type: $current_type";
-                }
-            }
-        }
-
-    }
-}
-
 # Recommendations for Indexes metrics
 sub mysql_indexes {
     return if ( $opt{idxstat} == 0 );
@@ -6128,7 +6069,6 @@ system_recommendations;    # avoid to many service on the same host
 log_file_recommandations;  # check log file content
 check_storage_engines;     # Show enabled storage engines
 mysql_databases;           # Show informations about databases
-mysql_tables;              # Show informations about table column
 
 mysql_indexes;             # Show informations about indexes
 security_recommendations;  # Display some security recommendations
